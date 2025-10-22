@@ -15,7 +15,7 @@ from cs336_basics.Embedding import Embedding
 from cs336_basics.Loss import cross_entropy
 from cs336_basics.Optimizer import AdamW, learning_rate_schedule, gradient_clipping
 from cs336_basics.RMSNorm import RMSNorm
-from cs336_basics.PositionwiseFeedforward import PositionwiseFeedforward
+from cs336_basics.PositionwiseFeedforward import PositionwiseFeedforward, SiLU
 from cs336_basics.RoPE import RotaryPositionalEmbedding
 from cs336_basics.MultiheadSelfAttention import MultiheadSelfAttention
 from cs336_basics.Train import data_loading, save_checkpoint, load_checkpoint
@@ -450,7 +450,6 @@ def run_rmsnorm(
     model.load_state_dict({"weight": weights})
     result = model(in_features)
     return result
-    # raise NotImplementedError
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -464,7 +463,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return SiLU(in_features)
 
 
 def run_get_batch(

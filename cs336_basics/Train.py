@@ -8,9 +8,9 @@ import numpy as np
 from tqdm import tqdm
 
 from cs336_basics.Loss import cross_entropy
-from cs336_basics.Optimizer import gradient_clipping, learning_rate_schedule
+from cs336_basics.Optimizer import gradient_clipping, learning_rate_schedule, AdamW
 from cs336_basics.Transformer import TransformerLM
-from tests.adapters import get_adamw_cls
+# from tests.adapters import get_adamw_cls
 
 DATA_DIR = pathlib.Path(__file__).parent.resolve().parent / "data"
 CONFIG_PATH = 'scripts/config.json'
@@ -95,8 +95,8 @@ def main():
     train_data, validate_data = np.memmap(TRAIN_DATA_PATH), np.memmap(VALIDATE_DATA_PATH)
 
     # build optimator
-    AdamW = get_adamw_cls()
-    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    adamW = AdamW
+    optimizer = adamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # get checkpoinnt
     start_iter = 0

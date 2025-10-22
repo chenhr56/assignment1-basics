@@ -6,7 +6,7 @@ import torch
 
 class Linear(nn.Module):
     def __init__(self, in_features, out_features, device=None, dtype=None):
-
+        super().__init__()
         factory_kwargs = {"device": device, "dtype": dtype}
 
         self.in_features = in_features

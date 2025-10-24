@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-from .Embedding import Embedding
+from .model import Embedding
 from .Linear import Linear
 from .MultiheadSelfAttention import MultiheadSelfAttention
 from .PositionwiseFeedforward import PositionwiseFeedforward

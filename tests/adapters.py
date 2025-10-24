@@ -10,13 +10,12 @@ import torch
 from torch import Tensor
 
 from cs336_basics.BPETokenizer import BPETokenizer, train_BPE
-from cs336_basics.Linear import Linear
-from cs336_basics.Embedding import Embedding
+from cs336_basics.model import Linear, Embedding, RotaryPositionalEmbedding
 from cs336_basics.Loss import cross_entropy
 from cs336_basics.Optimizer import AdamW, learning_rate_schedule, gradient_clipping
 from cs336_basics.RMSNorm import RMSNorm
-from cs336_basics.PositionwiseFeedforward import PositionwiseFeedforward, SiLU
-from cs336_basics.RoPE import RotaryPositionalEmbedding
+# from cs336_basics.PositionwiseFeedforward import PositionwiseFeedforward, SiLU
+# from cs336_basics.RoPE import RotaryPositionalEmbedding
 from cs336_basics.MultiheadSelfAttention import MultiheadSelfAttention
 from cs336_basics.Train import data_loading, save_checkpoint, load_checkpoint
 from cs336_basics.Transformer import TransformerBlock, TransformerLM
@@ -105,11 +104,10 @@ def run_swiglu(
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
 
-    model = PositionwiseFeedforward(d_model, d_ff)
-    model.w1.weight.data.copy_(w1_weight)
-    model.w2.weight.data.copy_(w2_weight)
-    model.w3.weight.data.copy_(w3_weight)
-    return model(in_features)
+    x = run_silu(torch.matmul(in_features, w1_weight.T))
+    y = torch.matmul(in_features, w3_weight.T)
+
+    return torch.matmul(x*y, w2_weight.T)
 
 
 def run_scaled_dot_product_attention(
@@ -463,7 +461,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    return SiLU(in_features)
+    return in_features * torch.sigmoid(in_features)
 
 
 def run_get_batch(

@@ -6,6 +6,8 @@ from torch import Tensor
 from einops import einsum, rearrange, einops
 from jaxtyping import Float, Int
 
+from cs336_basics.softmax import scaled_dot_product_attention
+
 
 class Linear(nn.Module):
     def __init__(self, d_in, d_out, device=None, dtype=None):

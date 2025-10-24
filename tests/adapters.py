@@ -9,18 +9,13 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
-from cs336_basics.BPETokenizer import BPETokenizer, train_BPE
-from cs336_basics.model import Linear, Embedding, RotaryPositionalEmbedding
+from cs336_basics.BPETokenizer import *
+from cs336_basics.model import *
 from cs336_basics.Loss import cross_entropy
 from cs336_basics.Optimizer import AdamW, learning_rate_schedule, gradient_clipping
-from cs336_basics.RMSNorm import RMSNorm
 # from cs336_basics.PositionwiseFeedforward import PositionwiseFeedforward, SiLU
 # from cs336_basics.RoPE import RotaryPositionalEmbedding
-from cs336_basics.MultiheadSelfAttention import MultiheadSelfAttention
-from cs336_basics.Train import data_loading, save_checkpoint, load_checkpoint
-from cs336_basics.Transformer import TransformerBlock, TransformerLM
-from cs336_basics.softmax import softmax
-from cs336_basics.softmax import scaled_dot_product_attention
+from cs336_basics.train import data_loading, save_checkpoint, load_checkpoint
 
 
 def run_linear(
@@ -162,7 +157,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    model = MultiheadSelfAttention(d_model, num_heads)
+    model = MultiheadSelfAttention(d_model=d_model, num_heads=num_heads)
     model.Q_.weight.data.copy_(q_proj_weight)
     model.K_.weight.data.copy_(k_proj_weight)
     model.V_.weight.data.copy_(v_proj_weight)
@@ -207,7 +202,12 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    model = MultiheadSelfAttention(d_model, num_heads, True, theta, max_seq_len, token_positions)
+    rope = RotaryPositionalEmbedding(
+        theta=theta,
+        d_k=d_model // num_heads,
+        max_seq_len=max_seq_len
+    )
+    model = MultiheadSelfAttention(d_model=d_model, num_heads=num_heads, pos_encoder=rope)
     model.Q_.weight.data.copy_(q_proj_weight)
     model.K_.weight.data.copy_(k_proj_weight)
     model.V_.weight.data.copy_(v_proj_weight)
@@ -308,14 +308,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    model = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=max_seq_len, theta=theta)
+    pos_encoder = RotaryPositionalEmbedding(
+        theta=theta, 
+        d_k=d_model // num_heads, 
+        max_seq_len=max_seq_len
+    ) 
+    model = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, pos_encoder=pos_encoder)
     model.pwff.w1.weight.data.copy_(weights['ffn.w1.weight'])
     model.pwff.w2.weight.data.copy_(weights['ffn.w2.weight'])
     model.pwff.w3.weight.data.copy_(weights['ffn.w3.weight'])
-    model.msa.Q_.weight.data.copy_(weights['attn.q_proj.weight'])
-    model.msa.K_.weight.data.copy_(weights['attn.k_proj.weight'])
-    model.msa.V_.weight.data.copy_(weights['attn.v_proj.weight'])
-    model.msa.O_.weight.data.copy_(weights['attn.output_proj.weight'])
+    model.attn.Q_.weight.data.copy_(weights['attn.q_proj.weight'])
+    model.attn.K_.weight.data.copy_(weights['attn.k_proj.weight'])
+    model.attn.V_.weight.data.copy_(weights['attn.v_proj.weight'])
+    model.attn.O_.weight.data.copy_(weights['attn.output_proj.weight'])
     model.rms1.weight.data.copy_(weights['ln1.weight'])
     model.rms2.weight.data.copy_(weights['ln2.weight'])
     return model(in_features)
@@ -402,7 +407,8 @@ def run_transformer_lm(
     """
     model = TransformerLM(
         vocab_size=vocab_size,
-        d_model=d_model, d_ff=d_ff,
+        d_model=d_model, 
+        d_ff=d_ff,
         context_length=context_length,
         num_heads=num_heads,
         num_layers=num_layers,
@@ -413,10 +419,10 @@ def run_transformer_lm(
         model.layers[i].pwff.w1.weight.data.copy_(weights[f'layers.{i}.ffn.w1.weight'])
         model.layers[i].pwff.w2.weight.data.copy_(weights[f'layers.{i}.ffn.w2.weight'])
         model.layers[i].pwff.w3.weight.data.copy_(weights[f'layers.{i}.ffn.w3.weight'])
-        model.layers[i].msa.Q_.weight.data.copy_(weights[f'layers.{i}.attn.q_proj.weight'])
-        model.layers[i].msa.K_.weight.data.copy_(weights[f'layers.{i}.attn.k_proj.weight'])
-        model.layers[i].msa.V_.weight.data.copy_(weights[f'layers.{i}.attn.v_proj.weight'])
-        model.layers[i].msa.O_.weight.data.copy_(weights[f'layers.{i}.attn.output_proj.weight'])
+        model.layers[i].attn.Q_.weight.data.copy_(weights[f'layers.{i}.attn.q_proj.weight'])
+        model.layers[i].attn.K_.weight.data.copy_(weights[f'layers.{i}.attn.k_proj.weight'])
+        model.layers[i].attn.V_.weight.data.copy_(weights[f'layers.{i}.attn.v_proj.weight'])
+        model.layers[i].attn.O_.weight.data.copy_(weights[f'layers.{i}.attn.output_proj.weight'])
         model.layers[i].rms1.weight.data.copy_(weights[f'layers.{i}.ln1.weight'])
         model.layers[i].rms2.weight.data.copy_(weights[f'layers.{i}.ln2.weight'])
     model.norm.weight.data.copy_(weights['ln_final.weight'])

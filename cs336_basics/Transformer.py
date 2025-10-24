@@ -70,9 +70,7 @@ class TransformerLM(nn.Module):
         for layer in self.layers:
             x = layer(x)
         print(f'TransformerLM forward, after layers, x.device: {x.device}')
-        print(f'TransformerLM forward, after layers, x.device: {x.device}')
         x = self.norm(x)
-        print(f'TransformerLM forward, after norm, x.device: {x.device}')
         print(f'TransformerLM forward, after norm, x.device: {x.device}')
         x = self.linear(x)
         print(f'TransformerLM forward, after linear, x.device: {x.device}')

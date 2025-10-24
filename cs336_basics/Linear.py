@@ -25,4 +25,4 @@ class Linear(nn.Module):
         return W
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x @ self.weight.T
+        return x @ self.weight.T.to(x.device)

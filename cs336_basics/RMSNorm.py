@@ -15,7 +15,7 @@ class RMSNorm (nn.Module):
         self.dtype = dtype
 
         w_init = self.weight_initialization(factory_kwargs)
-        self.weight = nn.Parameter(w_init)
+        self.weight = nn.Parameter(w_init.to(device))
 
     def weight_initialization(self, factory_kwargs: dict):
         W = torch.ones(self.d_model, **factory_kwargs)
@@ -27,6 +27,6 @@ class RMSNorm (nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
-        x = x.to(torch.float32)
-        result = (x / self.RMS(x)) * self.weight
+        x = x.to(self.device).to(torch.float32)
+        result = (x / self.RMS(x)) * self.weight.to(x.device)
         return result.to(in_dtype)

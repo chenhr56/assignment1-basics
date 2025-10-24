@@ -64,9 +64,13 @@ class TransformerLM(nn.Module):
         self.linear = Linear(in_features=d_model, out_features=vocab_size)
 
     def forward(self, in_features: torch.Tensor):
+        print(f'TransformerLM forward, in_features.device: {in_features.device}')
         x = self.token_embedding(in_features)
         for layer in self.layers:
             x = layer(x)
+        print(f'TransformerLM forward, after layers, in_features.device: {in_features.device}')
         x = self.norm(x)
+        print(f'TransformerLM forward, after norm, in_features.device: {in_features.device}')
         x = self.linear(x)
+        print(f'TransformerLM forward, after linear, in_features.device: {in_features.device}')
         return x # no softmax

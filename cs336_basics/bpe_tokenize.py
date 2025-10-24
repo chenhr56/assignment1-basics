@@ -58,20 +58,25 @@ def encode_text2npArray(tokenizer, path2txt, save_path):
     with open(path2txt, 'r') as f:
         numlines = sum(1 for _ in f)
     
-    tot_tokens = 0
-    with open(path2txt, 'r') as f:
-        for line in tqdm.tqdm(f, total =  numlines, desc="counting tokens"):
-            tot_tokens += len(tokenizer.encode(line))
-
-    tokensmm = np.memmap(save_path, dtype=int32, mopde="w+", shape=(tot_tokens,))
-    pos=0
+    all_tokens = []
+    
+    print("Tokenizing file in a single pass...")
     with open(path2txt, 'r') as f:
         for line in tqdm.tqdm(f, total =  numlines, desc="tokenizing"):
-            idxs = tokenizer.encode(line)
-            n=len(idxs)
-            tokensmm[pos:pos+n] = idxs
-            pos+=n
+            all_tokens.extend(tokenizer.encode(line))
+
+    tot_tokens = len(all_tokens)
+    print(f"Total tokens: {tot_tokens}")
+
+    # Now create the memmap and write the list to it
+    print(f"Writing to memmap at {save_path}...")
+    # 注意：在原始代码中，dtype=int32。如果您的系统默认 int 是 64 位，
+    # 明确指定 np.int32 可以节省一半空间。
+    tokensmm = np.memmap(save_path, dtype=np.int32, mode="w+", shape=(tot_tokens,))
+    
+    tokensmm[:] = all_tokens
     tokensmm.flush()
+    print("Flushing memmap complete.")
 
 
 def main():

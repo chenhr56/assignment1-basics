@@ -33,7 +33,7 @@ class MultiheadSelfAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seq_len = x.shape[-2]
         qkv_proj = torch.cat([self.Q_.weight, self.K_.weight, self.V_.weight])
-        qkv = x @ qkv_proj.T
+        qkv = x @ qkv_proj.T.to(x.device)
         q, k, v = qkv.chunk(3, -1)
         q = einops.rearrange(q, "... seq_len (h d_head) -> ... h seq_len d_head", h=self.num_heads)
         k = einops.rearrange(k, "... seq_len (h d_head) -> ... h seq_len d_head", h=self.num_heads)

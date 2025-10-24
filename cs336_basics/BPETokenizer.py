@@ -207,50 +207,80 @@ class BPETokenizer:
         self.merges = merges
         self.special_tokens = special_tokens or []
 
+        self.reversed_vocab = {v: k for k, v in self.vocab.items()}
+
+        self.byte_special_tokens = {
+            token.encode('utf-8'): self.reversed_vocab[token.encode('utf-8')]
+            for token in self.special_tokens
+        }
+
+        self.merge_ranks = {pair: i for i, pair in enumerate(self.merges)}
+
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
         raise NotImplementedError
 
     def encode(self, text: str) -> list[int]:
         """
-        Given an iterable of strings (e.g., a Python file handle), return a generator that lazily yields token IDs. 
-        This is required for memory-efficient tokenization of large files that we cannot directly load into memory.
+        Given a string, return a list of token IDs.
         """
-        reversed_vocab = {v: k for k, v in self.vocab.items()}
+        # 1. Pre-tokenize text into "words" (byte strings)
+        # We use the existing pre_tokenization function
         byte_pretokens = pre_tokenization(
             text, self.special_tokens, special_token_flag=False)
-        byte_special_tokens = [token.encode(
-            'utf-8') for token in self.special_tokens]
-        pretokens = []
+        
+        final_tokens = []
+        
+        for pretoken_bytes in byte_pretokens:
+            # --- OPTIMIZATION 2: Fast path for special tokens ---
+            special_token_id = self.byte_special_tokens.get(pretoken_bytes)
+            if special_token_id is not None:
+                final_tokens.append(special_token_id)
+                continue
 
-        for i, pretoken in enumerate(byte_pretokens):
-            new_pretoken = []
-            if pretoken in byte_special_tokens:
-                new_pretoken.append(reversed_vocab[pretoken])
-            else:
-                for t in pretoken:
-                    new_pretoken.append(reversed_vocab[bytes([t])])
+            # 2. Convert word (bytes) to initial list of token IDs
+            # e.g., b'hello' -> [104, 101, 108, 108, 111]
+            parts_ids = [self.reversed_vocab[bytes([b])] for b in pretoken_bytes]
 
-            pretokens.append(new_pretoken)
+            if not parts_ids:
+                continue
 
-        for i, pretoken in enumerate(pretokens):
-            for merge in self.merges:
-                new_pretoken, new_index = [], reversed_vocab[merge[0] + merge[1]]
-                j = 0
-                while j < len(pretoken):
-                    if j < len(pretoken) - 1 and (self.vocab[pretoken[j]], self.vocab[pretoken[j + 1]]) == merge:
-                        new_pretoken.append(new_index)
-                        j += 2
-                    else:
-                        new_pretoken.append(pretoken[j])
-                        j += 1
+            # --- OPTIMIZATION 3: Efficient O(N^2) merge loop ---
+            while True:
+                best_rank = float('inf')
+                best_pair_idx = -1
 
-                pretoken = new_pretoken
+                # 3a. Find the best (lowest rank) pair in the current list
+                for i in range(len(parts_ids) - 1):
+                    # Get the byte representation of the pair of token IDs
+                    pair = (self.vocab[parts_ids[i]], self.vocab[parts_ids[i+1]])
+                    
+                    # Check if this pair has a merge rule
+                    rank = self.merge_ranks.get(pair)
+                    
+                    if rank is not None and rank < best_rank:
+                        best_rank = rank
+                        best_pair_idx = i
+                
+                # 3b. If no mergeable pair was found, we're done with this word
+                if best_pair_idx == -1:
+                    break
+                    
+                # 3c. We found a pair to merge. Apply it.
+                idx1 = parts_ids[best_pair_idx]
+                idx2 = parts_ids[best_pair_idx + 1]
+                
+                # Get the ID for the new merged token
+                new_token_bytes = self.vocab[idx1] + self.vocab[idx2]
+                new_token_id = self.reversed_vocab[new_token_bytes]
+                
+                # Replace the pair with the new token
+                parts_ids = parts_ids[:best_pair_idx] + [new_token_id] + parts_ids[best_pair_idx + 2:]
 
-            pretokens[i] = pretoken
+            # Add the final merged token IDs for this word to the result
+            final_tokens.extend(parts_ids)
 
-        tokens = [token for pretoken in pretokens for token in pretoken]
-        return tokens
+        return final_tokens
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         for text in iterable:
@@ -268,7 +298,9 @@ class BPETokenizer:
             if token_id < vocab_size:
                 token = self.vocab[token_id]
             else:
-                token += bytes(replace_char, "utf-8")
+                # Handle out-of-vocab IDs, though this shouldn't happen
+                # with a BPE tokenizer trained on bytes
+                token = bytes(replace_char, "utf-8")
             tokens += token
         decoded = tokens.decode("utf-8", errors="replace")
         return decoded

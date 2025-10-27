@@ -126,15 +126,12 @@ def train_BPE(
     # 3. merge
     merges = []
 
-    # # --- OPTIMIZATION 1: Build pair_count ONCE before the loop ---
     pair_count = defaultdict(int)
     for token, count in pretoken_count.items():
         for i in range(len(token) - 1):
             pair = (token[i], token[i + 1])
             pair_count[pair] += count
     while len(vocab) < vocab_size:
-        # --- OPTIMIZATION 2: Efficiently find the best pair in one pass ---
-        # This replaces the slow max(values) -> filter -> max(keys)
         if not pair_count:
             break
 
@@ -145,11 +142,9 @@ def train_BPE(
                 best_count = count
                 best_pair = pair
             elif count == best_count:
-                # Tie-breaking logic from original code: max(candidates)
                 if best_pair is None or pair > best_pair:
                     best_pair = pair
 
-        # If no pairs left or max count is 1 (no benefit in merging), stop.
         if best_pair is None or best_count < 2:
             break
 
@@ -159,9 +154,7 @@ def train_BPE(
         last_tokenID += 1
         merges.append(best_pair)  # Append the pair tuple
 
-        # --- OPTIMIZATION 3: Incrementally update counts ---
         changes = []
-        # Find all tokens that need changing (same as before)
         for token, count in pretoken_count.items():
             indexs = [i for i in range(len(token) - 1) if token[i:i + 2] == best_pair]
             if indexs:
@@ -177,24 +170,17 @@ def train_BPE(
                 new_pretoken = tuple(new_pretoken)
                 changes.append((token, new_pretoken, count))
 
-        # Apply changes and update counts incrementally
         for oldtoken, new_pretoken, count in changes:
-            # 1. Update pretoken_count
-            # (Note: Fixed potential bug, was 'oldtoken_')
             if oldtoken in pretoken_count:
                 del pretoken_count[oldtoken]
             pretoken_count[new_pretoken] = pretoken_count.get(new_pretoken, 0) + count
 
-            # 2. Update pair_count (the new efficient part)
-            # Decrement counts from oldtoken's pairs
             for i in range(len(oldtoken) - 1):
                 pair = (oldtoken[i], oldtoken[i + 1])
                 pair_count[pair] -= count
-                # Clean up dict if count drops to 0 or below
                 if pair_count[pair] <= 0:
                     del pair_count[pair]
 
-            # Increment counts from new_pretoken's pairs
             for i in range(len(new_pretoken) - 1):
                 pair = (new_pretoken[i], new_pretoken[i + 1])
                 pair_count[pair] = pair_count.get(pair, 0) + count
@@ -224,60 +210,46 @@ class BPETokenizer:
         """
         Given a string, return a list of token IDs.
         """
-        # 1. Pre-tokenize text into "words" (byte strings)
-        # We use the existing pre_tokenization function
         byte_pretokens = pre_tokenization(
             text, self.special_tokens, special_token_flag=False)
         
         final_tokens = []
         
         for pretoken_bytes in byte_pretokens:
-            # --- OPTIMIZATION 2: Fast path for special tokens ---
             special_token_id = self.byte_special_tokens.get(pretoken_bytes)
             if special_token_id is not None:
                 final_tokens.append(special_token_id)
                 continue
 
-            # 2. Convert word (bytes) to initial list of token IDs
-            # e.g., b'hello' -> [104, 101, 108, 108, 111]
             parts_ids = [self.reversed_vocab[bytes([b])] for b in pretoken_bytes]
 
             if not parts_ids:
                 continue
 
-            # --- OPTIMIZATION 3: Efficient O(N^2) merge loop ---
             while True:
                 best_rank = float('inf')
                 best_pair_idx = -1
 
-                # 3a. Find the best (lowest rank) pair in the current list
                 for i in range(len(parts_ids) - 1):
-                    # Get the byte representation of the pair of token IDs
                     pair = (self.vocab[parts_ids[i]], self.vocab[parts_ids[i+1]])
                     
-                    # Check if this pair has a merge rule
                     rank = self.merge_ranks.get(pair)
                     
                     if rank is not None and rank < best_rank:
                         best_rank = rank
                         best_pair_idx = i
                 
-                # 3b. If no mergeable pair was found, we're done with this word
                 if best_pair_idx == -1:
                     break
                     
-                # 3c. We found a pair to merge. Apply it.
                 idx1 = parts_ids[best_pair_idx]
                 idx2 = parts_ids[best_pair_idx + 1]
                 
-                # Get the ID for the new merged token
                 new_token_bytes = self.vocab[idx1] + self.vocab[idx2]
                 new_token_id = self.reversed_vocab[new_token_bytes]
                 
-                # Replace the pair with the new token
                 parts_ids = parts_ids[:best_pair_idx] + [new_token_id] + parts_ids[best_pair_idx + 2:]
 
-            # Add the final merged token IDs for this word to the result
             final_tokens.extend(parts_ids)
 
         return final_tokens
@@ -298,8 +270,6 @@ class BPETokenizer:
             if token_id < vocab_size:
                 token = self.vocab[token_id]
             else:
-                # Handle out-of-vocab IDs, though this shouldn't happen
-                # with a BPE tokenizer trained on bytes
                 token = bytes(replace_char, "utf-8")
             tokens += token
         decoded = tokens.decode("utf-8", errors="replace")
